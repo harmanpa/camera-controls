@@ -39,6 +39,7 @@ export declare class CameraControls extends EventDispatcher {
     protected _sphericalEnd: _THREE.Spherical;
     protected _zoom: number;
     protected _zoomEnd: number;
+    protected _zoomToBox: boolean;
     protected _target0: _THREE.Vector3;
     protected _position0: _THREE.Vector3;
     protected _zoom0: number;
@@ -77,7 +78,10 @@ export declare class CameraControls extends EventDispatcher {
     reset(enableTransition?: boolean): void;
     saveState(): void;
     updateCameraUp(): void;
+    clearDynamic(): void;
     update(delta: number): boolean;
+    zoomFactor(): number;
+    screenCoords(v3: _THREE.Vector3, w: number, h: number, v2: _THREE.Vector2): _THREE.Vector2;
     toJSON(): string;
     fromJSON(json: any, enableTransition?: boolean): void;
     dispose(): void;

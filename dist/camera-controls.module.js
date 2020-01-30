@@ -146,6 +146,7 @@ var _yColumn;
 var _sphericalA;
 var _sphericalB;
 var _box3;
+var _box2;
 var _rotationMatrix;
 var _raycaster;
 var CameraControls = (function (_super) {
@@ -189,6 +190,7 @@ var CameraControls = (function (_super) {
         _this._sphericalEnd = _this._spherical.clone();
         _this._zoom = _this._camera.zoom;
         _this._zoomEnd = _this._zoom;
+        _this._zoomToBox = false;
         _this._nearPlaneCorners = [
             new THREE.Vector3(),
             new THREE.Vector3(),
@@ -495,6 +497,7 @@ var CameraControls = (function (_super) {
         _sphericalA = new THREE.Spherical();
         _sphericalB = new THREE.Spherical();
         _box3 = new THREE.Box3();
+        _box2 = new THREE.Box2();
         _rotationMatrix = new THREE.Matrix4();
         _raycaster = new THREE.Raycaster();
     };
@@ -547,6 +550,7 @@ var CameraControls = (function (_super) {
             this._spherical.theta = this._sphericalEnd.theta;
             this._spherical.phi = this._sphericalEnd.phi;
         }
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.dolly = function (distance, enableTransition) {
@@ -561,6 +565,7 @@ var CameraControls = (function (_super) {
         if (!enableTransition) {
             this._spherical.radius = this._sphericalEnd.radius;
         }
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.zoom = function (zoomStep, enableTransition) {
@@ -573,6 +578,7 @@ var CameraControls = (function (_super) {
         if (!enableTransition) {
             this._zoom = this._zoomEnd;
         }
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.pan = function (x, y, enableTransition) {
@@ -592,6 +598,7 @@ var CameraControls = (function (_super) {
         if (!enableTransition) {
             this._target.copy(this._targetEnd);
         }
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.forward = function (distance, enableTransition) {
@@ -603,6 +610,7 @@ var CameraControls = (function (_super) {
         if (!enableTransition) {
             this._target.copy(this._targetEnd);
         }
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.moveTo = function (x, y, z, enableTransition) {
@@ -611,31 +619,44 @@ var CameraControls = (function (_super) {
         if (!enableTransition) {
             this._target.copy(this._targetEnd);
         }
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.fitTo = function (box3OrObject, enableTransition, options) {
         if (options === void 0) { options = FIT_TO_OPTION_DEFAULT; }
-        if (notSupportedInOrthographicCamera(this._camera, 'fitTo'))
-            return;
-        var paddingLeft = options.paddingLeft || 0;
-        var paddingRight = options.paddingRight || 0;
-        var paddingBottom = options.paddingBottom || 0;
-        var paddingTop = options.paddingTop || 0;
-        var boundingBox = box3OrObject.isBox3 ? _box3.copy(box3OrObject) :
-            _box3.setFromObject(box3OrObject);
-        var size = boundingBox.getSize(_v3A);
-        var boundingWidth = size.x + paddingLeft + paddingRight;
-        var boundingHeight = size.y + paddingTop + paddingBottom;
-        var boundingDepth = size.z;
-        var distance = this.getDistanceToFit(boundingWidth, boundingHeight, boundingDepth);
-        this.dollyTo(distance, enableTransition);
-        var boundingBoxCenter = boundingBox.getCenter(_v3A);
-        var cx = boundingBoxCenter.x - (paddingLeft * 0.5 - paddingRight * 0.5);
-        var cy = boundingBoxCenter.y + (paddingTop * 0.5 - paddingBottom * 0.5);
-        var cz = boundingBoxCenter.z;
-        this.moveTo(cx, cy, cz, enableTransition);
-        this.normalizeRotations();
-        this.rotateTo(0, 90 * THREE.Math.DEG2RAD, enableTransition);
+        this.clearDynamic();
+        if (this._camera.isPerspectiveCamera) {
+            var paddingLeft = options.paddingLeft || 0;
+            var paddingRight = options.paddingRight || 0;
+            var paddingBottom = options.paddingBottom || 0;
+            var paddingTop = options.paddingTop || 0;
+            var boundingBox = box3OrObject.isBox3 ? _box3.copy(box3OrObject) :
+                _box3.setFromObject(box3OrObject);
+            var size = boundingBox.getSize(_v3A);
+            var boundingWidth = size.x + paddingLeft + paddingRight;
+            var boundingHeight = size.y + paddingTop + paddingBottom;
+            var boundingDepth = size.z;
+            var distance = this.getDistanceToFit(boundingWidth, boundingHeight, boundingDepth);
+            this.dollyTo(distance, enableTransition);
+            var boundingBoxCenter = boundingBox.getCenter(_v3A);
+            var cx = boundingBoxCenter.x - (paddingLeft * 0.5 - paddingRight * 0.5);
+            var cy = boundingBoxCenter.y + (paddingTop * 0.5 - paddingBottom * 0.5);
+            var cz = boundingBoxCenter.z;
+            this.moveTo(cx, cy, cz, enableTransition);
+            this.normalizeRotations();
+            this.rotateTo(0, 90 * THREE.Math.DEG2RAD, enableTransition);
+        }
+        else if (this._camera.isOrthographicCamera) {
+            var boundingBox = box3OrObject.isBox3 ? _box3.copy(box3OrObject) :
+                _box3.setFromObject(box3OrObject);
+            boundingBox.getCenter(_v3B);
+            this._zoomToBox = true;
+            var position = this.getPosition(_v3A);
+            this._targetEnd.copy(_v3B);
+            this._sphericalEnd.setFromVector3(position.sub(_v3B).applyQuaternion(this._yAxisUpSpace));
+            this.normalizeRotations();
+            this._needsUpdate = true;
+        }
     };
     CameraControls.prototype.setLookAt = function (positionX, positionY, positionZ, targetX, targetY, targetZ, enableTransition) {
         if (enableTransition === void 0) { enableTransition = false; }
@@ -648,6 +669,7 @@ var CameraControls = (function (_super) {
             this._target.copy(this._targetEnd);
             this._spherical.copy(this._sphericalEnd);
         }
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.lerpLookAt = function (positionAX, positionAY, positionAZ, targetAX, targetAY, targetAZ, positionBX, positionBY, positionBZ, targetBX, targetBY, targetBZ, t, enableTransition) {
@@ -668,6 +690,7 @@ var CameraControls = (function (_super) {
             this._target.copy(this._targetEnd);
             this._spherical.copy(this._sphericalEnd);
         }
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.setPosition = function (positionX, positionY, positionZ, enableTransition) {
@@ -688,6 +711,7 @@ var CameraControls = (function (_super) {
         }
         this._boundary.copy(box3);
         this._boundary.clampPoint(this._targetEnd, this._targetEnd);
+        this.clearDynamic();
         this._needsUpdate = true;
     };
     CameraControls.prototype.setViewport = function (viewportOrX, y, width, height) {
@@ -702,6 +726,7 @@ var CameraControls = (function (_super) {
         else {
             this._viewport.copy(viewportOrX);
         }
+        this.clearDynamic();
     };
     CameraControls.prototype.getDistanceToFit = function (width, height, depth) {
         if (notSupportedInOrthographicCamera(this._camera, 'getDistanceToFit'))
@@ -738,6 +763,9 @@ var CameraControls = (function (_super) {
     CameraControls.prototype.updateCameraUp = function () {
         this._yAxisUpSpace.setFromUnitVectors(this._camera.up, _AXIS_Y);
         this._yAxisUpSpaceInverse.copy(this._yAxisUpSpace).inverse();
+    };
+    CameraControls.prototype.clearDynamic = function () {
+        this._zoomToBox = false;
     };
     CameraControls.prototype.update = function (delta) {
         var dampingFactor = this._state === ACTION.NONE ? this.dampingFactor : this.draggingDampingFactor;
@@ -787,11 +815,20 @@ var CameraControls = (function (_super) {
         if (this._boundaryEnclosesCamera) {
             this._encloseToBoundary(this._camera.position.copy(this._target), _v3A.setFromSpherical(this._spherical).applyQuaternion(this._yAxisUpSpaceInverse), 1.0);
         }
+        if (this._zoomToBox) {
+            this._zoomEnd = this._zoom * this.zoomFactor();
+        }
         var zoomDelta = this._zoomEnd - this._zoom;
         this._zoom += zoomDelta * lerpRatio;
+        console.log(this._zoom);
         if (this._camera.zoom !== this._zoom) {
-            if (approxZero(zoomDelta))
+            if (this._zoomToBox && Math.abs(zoomDelta) < 0.01) {
+                this._zoomEnd = this._zoom;
+                this._zoomToBox = false;
+            }
+            else if (approxZero(zoomDelta)) {
                 this._zoom = this._zoomEnd;
+            }
             this._camera.zoom = this._zoom;
             this._camera.updateProjectionMatrix();
             this._updateNearPlaneCorners();
@@ -811,6 +848,36 @@ var CameraControls = (function (_super) {
         this._updatedLastTime = updated;
         this._needsUpdate = false;
         return updated;
+    };
+    CameraControls.prototype.zoomFactor = function () {
+        var rect = this._domElement.getBoundingClientRect();
+        var v3 = new THREE.Vector3();
+        var v2 = new THREE.Vector2();
+        var min = new THREE.Vector2();
+        var max = new THREE.Vector2();
+        min.set(Number.MAX_VALUE, Number.MAX_VALUE);
+        max.set(-Number.MAX_VALUE, -Number.MAX_VALUE);
+        for (var x = 0; x <= 1; x++) {
+            for (var y = 0; y <= 1; y++) {
+                for (var z = 0; z <= 1; z++) {
+                    v3.set(x === 0 ? _box3.min.x : _box3.max.x, y === 0 ? _box3.min.y : _box3.max.y, z === 0 ? _box3.min.z : _box3.max.z);
+                    this.screenCoords(v3, rect.width, rect.height, v2);
+                    min.min(v2);
+                    max.max(v2);
+                }
+            }
+        }
+        _box2.set(min, max);
+        _box2.getSize(v2);
+        return Math.min(rect.width / v2.x - 1.0, rect.height / v2.y - 1.0) + 1.0;
+    };
+    CameraControls.prototype.screenCoords = function (v3, w, h, v2) {
+        var w2 = w / 2;
+        var h2 = h / 2;
+        v3.project(this._camera);
+        v2.x = (v3.x * w2) + w2;
+        v2.y = -(v3.y * h2) + h2;
+        return v2;
     };
     CameraControls.prototype.toJSON = function () {
         return JSON.stringify({

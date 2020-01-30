@@ -38,6 +38,7 @@ let _yColumn: _THREE.Vector3;
 let _sphericalA: _THREE.Spherical;
 let _sphericalB: _THREE.Spherical;
 let _box3: _THREE.Box3;
+let _box2: _THREE.Box2;
 let _rotationMatrix: _THREE.Matrix4;
 let _raycaster: _THREE.Raycaster;
 
@@ -57,6 +58,7 @@ export class CameraControls extends EventDispatcher {
 		_sphericalA = new THREE.Spherical();
 		_sphericalB = new THREE.Spherical();
 		_box3 = new THREE.Box3();
+		_box2 = new THREE.Box2();
 		_rotationMatrix = new THREE.Matrix4();
 		_raycaster = new THREE.Raycaster();
 
@@ -119,6 +121,7 @@ export class CameraControls extends EventDispatcher {
 
 	protected _zoom: number;
 	protected _zoomEnd: number;
+	protected _zoomToBox: boolean;
 
 	// reset
 	protected _target0: _THREE.Vector3;
@@ -161,6 +164,7 @@ export class CameraControls extends EventDispatcher {
 
 		this._zoom = this._camera.zoom;
 		this._zoomEnd = this._zoom;
+		this._zoomToBox = false;
 
 		// collisionTest uses nearPlane.s
 		this._nearPlaneCorners = [
@@ -696,6 +700,8 @@ export class CameraControls extends EventDispatcher {
 
 		}
 
+		this.clearDynamic();
+
 		this._needsUpdate = true;
 
 	}
@@ -718,6 +724,8 @@ export class CameraControls extends EventDispatcher {
 
 		}
 
+		this.clearDynamic();
+
 		this._needsUpdate = true;
 
 	}
@@ -737,7 +745,7 @@ export class CameraControls extends EventDispatcher {
 			this._zoom = this._zoomEnd;
 
 		}
-
+		this.clearDynamic();
 		this._needsUpdate = true;
 
 	}
@@ -766,7 +774,7 @@ export class CameraControls extends EventDispatcher {
 			this._target.copy( this._targetEnd );
 
 		}
-
+		this.clearDynamic();
 		this._needsUpdate = true;
 
 	}
@@ -784,7 +792,7 @@ export class CameraControls extends EventDispatcher {
 			this._target.copy( this._targetEnd );
 
 		}
-
+		this.clearDynamic();
 		this._needsUpdate = true;
 
 	}
@@ -798,42 +806,53 @@ export class CameraControls extends EventDispatcher {
 			this._target.copy( this._targetEnd );
 
 		}
-
+		this.clearDynamic();
 		this._needsUpdate = true;
 
 	}
 
 	fitTo( box3OrObject: _THREE.Box3 | _THREE.Object3D, enableTransition: boolean, options: FitToOption = FIT_TO_OPTION_DEFAULT ): void {
+		this.clearDynamic();
+		if ( ( this._camera as _THREE.PerspectiveCamera ).isPerspectiveCamera ) {
 
-		if ( notSupportedInOrthographicCamera( this._camera, 'fitTo' ) ) return;
+			const paddingLeft = options.paddingLeft || 0;
+			const paddingRight = options.paddingRight || 0;
+			const paddingBottom = options.paddingBottom || 0;
+			const paddingTop = options.paddingTop || 0;
 
-		const paddingLeft   = options.paddingLeft   || 0;
-		const paddingRight  = options.paddingRight  || 0;
-		const paddingBottom = options.paddingBottom || 0;
-		const paddingTop    = options.paddingTop    || 0;
+			// TODO `Box3.isBox3: boolean` is missing in three.js. waiting for next update of three.js.
+			// see this PR: https://github.com/mrdoob/three.js/pull/18259
+			const boundingBox =
+				(box3OrObject as any).isBox3 ? _box3.copy(box3OrObject as _THREE.Box3) :
+					_box3.setFromObject(box3OrObject as _THREE.Object3D);
+			const size = boundingBox.getSize(_v3A);
+			const boundingWidth = size.x + paddingLeft + paddingRight;
+			const boundingHeight = size.y + paddingTop + paddingBottom;
+			const boundingDepth = size.z;
 
-		// TODO `Box3.isBox3: boolean` is missing in three.js. waiting for next update of three.js.
-		// see this PR: https://github.com/mrdoob/three.js/pull/18259
-		const boundingBox =
-			( box3OrObject as any ).isBox3 ? _box3.copy( box3OrObject as _THREE.Box3 ) :
-			_box3.setFromObject( box3OrObject as _THREE.Object3D );
-		const size = boundingBox.getSize( _v3A );
-		const boundingWidth  = size.x + paddingLeft + paddingRight;
-		const boundingHeight = size.y + paddingTop  + paddingBottom;
-		const boundingDepth  = size.z;
+			const distance = this.getDistanceToFit(boundingWidth, boundingHeight, boundingDepth);
+			this.dollyTo(distance, enableTransition);
 
-		const distance = this.getDistanceToFit( boundingWidth, boundingHeight, boundingDepth );
-		this.dollyTo( distance, enableTransition );
+			const boundingBoxCenter = boundingBox.getCenter(_v3A);
+			const cx = boundingBoxCenter.x - (paddingLeft * 0.5 - paddingRight * 0.5);
+			const cy = boundingBoxCenter.y + (paddingTop * 0.5 - paddingBottom * 0.5);
+			const cz = boundingBoxCenter.z;
+			this.moveTo(cx, cy, cz, enableTransition);
 
-		const boundingBoxCenter = boundingBox.getCenter( _v3A );
-		const cx = boundingBoxCenter.x - ( paddingLeft * 0.5 - paddingRight  * 0.5 );
-		const cy = boundingBoxCenter.y + ( paddingTop  * 0.5 - paddingBottom * 0.5 );
-		const cz = boundingBoxCenter.z;
-		this.moveTo( cx, cy, cz, enableTransition );
-
-		this.normalizeRotations();
-		this.rotateTo( 0, 90 * THREE.Math.DEG2RAD, enableTransition );
-
+			this.normalizeRotations();
+			this.rotateTo(0, 90 * THREE.Math.DEG2RAD, enableTransition);
+		} else if ( ( this._camera as _THREE.OrthographicCamera ).isOrthographicCamera ) {
+			const boundingBox =
+				(box3OrObject as any).isBox3 ? _box3.copy(box3OrObject as _THREE.Box3) :
+					_box3.setFromObject(box3OrObject as _THREE.Object3D);
+			boundingBox.getCenter(_v3B);
+			this._zoomToBox = true;
+			const position = this.getPosition(_v3A);
+			this._targetEnd.copy( _v3B );
+			this._sphericalEnd.setFromVector3( position.sub( _v3B ).applyQuaternion( this._yAxisUpSpace ) );
+			this.normalizeRotations();
+			this._needsUpdate = true;
+		}
 	}
 
 	setLookAt(
@@ -855,7 +874,7 @@ export class CameraControls extends EventDispatcher {
 			this._spherical.copy( this._sphericalEnd );
 
 		}
-
+		this.clearDynamic();
 		this._needsUpdate = true;
 
 	}
@@ -897,7 +916,7 @@ export class CameraControls extends EventDispatcher {
 			this._spherical.copy( this._sphericalEnd );
 
 		}
-
+		this.clearDynamic();
 		this._needsUpdate = true;
 
 	}
@@ -937,6 +956,7 @@ export class CameraControls extends EventDispatcher {
 
 		this._boundary.copy( box3 );
 		this._boundary.clampPoint( this._targetEnd, this._targetEnd );
+		this.clearDynamic();
 		this._needsUpdate = true;
 
 	}
@@ -962,7 +982,7 @@ export class CameraControls extends EventDispatcher {
 			this._viewport.copy( viewportOrX );
 
 		}
-
+		this.clearDynamic();
 	}
 
 	getDistanceToFit( width: number, height: number, depth: number ): number {
@@ -1024,6 +1044,10 @@ export class CameraControls extends EventDispatcher {
 		this._yAxisUpSpace.setFromUnitVectors( this._camera.up, _AXIS_Y );
 		this._yAxisUpSpaceInverse.copy( this._yAxisUpSpace ).inverse();
 
+	}
+
+	clearDynamic(): void {
+		this._zoomToBox = false;
 	}
 
 	update( delta: number ): boolean {
@@ -1105,12 +1129,21 @@ export class CameraControls extends EventDispatcher {
 		}
 
 		// zoom
+		if (this._zoomToBox) {
+			this._zoomEnd = this._zoom * this.zoomFactor();
+		}
+
 		const zoomDelta = this._zoomEnd - this._zoom;
 		this._zoom += zoomDelta * lerpRatio;
-
+		console.log(this._zoom);
 		if ( this._camera.zoom !== this._zoom ) {
 
-			if ( approxZero( zoomDelta ) ) this._zoom = this._zoomEnd;
+			if(this._zoomToBox && Math.abs(zoomDelta) < 0.01) {
+				this._zoomEnd = this._zoom;
+				this._zoomToBox = false;
+			} else if ( approxZero( zoomDelta ) ) {
+				this._zoom = this._zoomEnd;
+			}
 
 			this._camera.zoom = this._zoom;
 			this._camera.updateProjectionMatrix();
@@ -1141,6 +1174,38 @@ export class CameraControls extends EventDispatcher {
 		this._needsUpdate = false;
 		return updated;
 
+	}
+
+	zoomFactor(): number {
+		const rect = this._domElement.getBoundingClientRect();
+		const v3 = new THREE.Vector3();
+		const v2 = new THREE.Vector2();
+		const min = new THREE.Vector2();
+		const max = new THREE.Vector2();
+		min.set(Number.MAX_VALUE, Number.MAX_VALUE);
+		max.set(-Number.MAX_VALUE, -Number.MAX_VALUE);
+		for (let x = 0; x <= 1; x++) {
+			for (let y = 0; y <= 1; y++) {
+				for (let z = 0; z <= 1; z++) {
+					v3.set(x === 0 ? _box3.min.x : _box3.max.x, y === 0 ? _box3.min.y : _box3.max.y, z === 0 ? _box3.min.z : _box3.max.z);
+					this.screenCoords(v3, rect.width, rect.height, v2);
+					min.min(v2);
+					max.max(v2);
+				}
+			}
+		}
+		_box2.set(min, max);
+		_box2.getSize(v2);
+		return Math.min(rect.width / v2.x - 1.0, rect.height / v2.y - 1.0) + 1.0;
+	}
+
+	screenCoords(v3: _THREE.Vector3, w: number, h: number, v2: _THREE.Vector2): _THREE.Vector2 {
+		const w2 = w / 2;
+		const h2 = h / 2;
+		v3.project(this._camera);
+		v2.x = (v3.x * w2) + w2;
+		v2.y = -(v3.y * h2) + h2;
+		return v2;
 	}
 
 	toJSON() {
