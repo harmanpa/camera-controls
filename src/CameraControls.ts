@@ -1135,7 +1135,7 @@ export class CameraControls extends EventDispatcher {
 
 		const zoomDelta = this._zoomEnd - this._zoom;
 		this._zoom += zoomDelta * lerpRatio;
-		console.log(this._zoom);
+
 		if ( this._camera.zoom !== this._zoom ) {
 
 			if(this._zoomToBox && Math.abs(zoomDelta) < 0.01) {

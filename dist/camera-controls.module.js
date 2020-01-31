@@ -820,7 +820,6 @@ var CameraControls = (function (_super) {
         }
         var zoomDelta = this._zoomEnd - this._zoom;
         this._zoom += zoomDelta * lerpRatio;
-        console.log(this._zoom);
         if (this._camera.zoom !== this._zoom) {
             if (this._zoomToBox && Math.abs(zoomDelta) < 0.01) {
                 this._zoomEnd = this._zoom;
@@ -993,8 +992,8 @@ var CameraControls = (function (_super) {
         for (var i = 0; i < 4; i++) {
             var nearPlaneCorner = _v3B.copy(this._nearPlaneCorners[i]);
             nearPlaneCorner.applyMatrix4(_rotationMatrix);
-            var origin = _v3C.addVectors(this._target, nearPlaneCorner);
-            _raycaster.set(origin, direction);
+            var origin_1 = _v3C.addVectors(this._target, nearPlaneCorner);
+            _raycaster.set(origin_1, direction);
             _raycaster.far = distance;
             var intersects = _raycaster.intersectObjects(this.colliderMeshes);
             if (intersects.length !== 0 && intersects[0].distance < distance) {

@@ -1,6 +1,6 @@
 {
   "name": "camera-controls",
-  "version": "1.18.2",
+  "version": "1.19.0",
   "author": "Yomotsu",
   "license": "MIT",
   "main": "dist/camera-controls.js",
@@ -16,8 +16,8 @@
     "rollup": "^1.27.14",
     "rollup-plugin-typescript2": "^0.25.3",
     "terser": "^4.4.3",
-    "three": "^0.112.1",
-    "typescript": "~3.0"
+    "three": "^0.110.0",
+    "typescript": "3.4.5"
   },
   "scripts": {
     "dev": "rollup --config --watch",
